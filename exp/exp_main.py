@@ -8,9 +8,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch import optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 import os
 import time
+import wandb
 
 import warnings
 import matplotlib.pyplot as plt
@@ -50,6 +52,9 @@ class Exp_Main(Exp_Basic):
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
+        preds = []
+        trues = []
+
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
@@ -78,15 +83,26 @@ class Exp_Main(Exp_Basic):
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
-                pred = outputs.detach().cpu()
-                true = batch_y.detach().cpu()
+                loss = criterion(outputs, batch_y).detach().cpu().numpy()
 
-                loss = criterion(pred, true)
+                pred = outputs.detach().cpu().numpy()
+                true = batch_y.detach().cpu().numpy()
+
+                preds.append(pred)
+                trues.append(true)
 
                 total_loss.append(loss)
+
         total_loss = np.average(total_loss)
+        preds = np.array(preds)
+        trues = np.array(trues)
+        preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
+        trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
+
+        mae, mse, rmse, mape, mspe = metric(preds, trues)
+
         self.model.train()
-        return total_loss
+        return total_loss, mae, mse
 
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
@@ -108,7 +124,22 @@ class Exp_Main(Exp_Basic):
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
+        if self.args.step_lrs:
+            lrs = ReduceLROnPlateau(model_optim, mode='min', \
+                                    factor=self.args.step_lrs_alpha, \
+                                    patience=self.args.step_lrs_patience)
+
+        wandb.log({"train/total_iters": len(train_loader)})
+
         for epoch in range(self.args.train_epochs):
+            lr = model_optim.param_groups[0]['lr']
+            print("Starting epoch %d with LR as %.2E" % (epoch, lr))
+            wandb.log({'train/epoch': epoch, 'train/lr': lr})
+
+            if self.args.step_lrs and lr <= self.args.step_lrs_cutoff:
+                print("Stopping as LR beyond cutoff")
+                break
+
             iter_count = 0
             train_loss = []
 
@@ -116,6 +147,8 @@ class Exp_Main(Exp_Basic):
             epoch_time = time.time()
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
                 iter_count += 1
+                wandb.log({'train/iter': i})
+
                 model_optim.zero_grad()
                 batch_x = batch_x.float().to(self.device)
 
@@ -151,6 +184,7 @@ class Exp_Main(Exp_Basic):
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                     loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
+                    wandb.log({"train/loss": loss.item()})
 
                 if (i + 1) % 100 == 0:
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
@@ -159,6 +193,9 @@ class Exp_Main(Exp_Basic):
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
                     time_now = time.time()
+                    wandb.log({"train/iter_time": speed, \
+                            "train/time_left_sec": left_time, \
+                            "train/time_left_min": left_time/60})
 
                 if self.args.use_amp:
                     scaler.scale(loss).backward()
@@ -169,9 +206,12 @@ class Exp_Main(Exp_Basic):
                     model_optim.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
+            wandb.log({"train/epoch_time": time.time()-epoch_time})
             train_loss = np.average(train_loss)
-            vali_loss = self.vali(vali_data, vali_loader, criterion)
-            test_loss = self.vali(test_data, test_loader, criterion)
+            vali_loss, vali_mae, vali_mse = self.vali(vali_data, vali_loader, criterion)
+            test_loss, test_mae, test_mse = self.vali(test_data, test_loader, criterion)
+            wandb.log({"train/epoch_loss": train_loss, "valid/loss": vali_loss.item(), "test/loss": test_loss.item()})
+            wandb.log({"valid/mae": vali_mae, "valid/mse": vali_mse, "test/mae": test_mae, "test/mse": test_mse})
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
@@ -180,19 +220,23 @@ class Exp_Main(Exp_Basic):
                 print("Early stopping")
                 break
 
-            adjust_learning_rate(model_optim, epoch + 1, self.args)
+            if self.args.step_lrs:
+                lrs.step(vali_loss)
+            else:
+                adjust_learning_rate(model_optim, epoch+1, self.args)
 
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
 
         return self.model
 
-    def test(self, setting, test=0):
+    def test(self, setting, test=0, criterion=None):
         test_data, test_loader = self._get_data(flag='test')
         if test:
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
+        total_loss = []
         preds = []
         trues = []
         folder_path = './test_results/' + setting + '/'
@@ -234,6 +278,10 @@ class Exp_Main(Exp_Basic):
                 pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
                 true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
 
+                if criterion:
+                    loss = criterion(pred, true)
+                total_loss.append(loss)  
+
                 preds.append(pred)
                 trues.append(true)
                 if i % 20 == 0:
@@ -242,6 +290,7 @@ class Exp_Main(Exp_Basic):
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
+        total_loss = np.average(total_loss)
         preds = np.array(preds)
         trues = np.array(trues)
         print('test shape:', preds.shape, trues.shape)
@@ -262,6 +311,8 @@ class Exp_Main(Exp_Basic):
         f.write('\n')
         f.write('\n')
         f.close()
+
+        wandb.log({"test/mse": mse, "test/mae": mae, "test/loss": total_loss})
 
         np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
         np.save(folder_path + 'pred.npy', preds)

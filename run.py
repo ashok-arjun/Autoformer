@@ -4,13 +4,15 @@ import torch
 from exp.exp_main import Exp_Main
 import random
 import numpy as np
-
+import wandb
+from utils.training import set_seed
 
 def main():
     fix_seed = 2021
     random.seed(fix_seed)
     torch.manual_seed(fix_seed)
     np.random.seed(fix_seed)
+    set_seed(fix_seed)
 
     parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
 
@@ -77,6 +79,13 @@ def main():
     parser.add_argument('--use_multi_gpu', action='store_true', help='use multiple gpus', default=False)
     parser.add_argument('--devices', type=str, default='0,1,2,3', help='device ids of multile gpus')
 
+    # Custom
+    parser.add_argument('--wandb_run_name', type=str, help='device ids of multile gpus')
+    parser.add_argument('--step_lrs', action='store_true', help='device ids of multile gpus')
+    parser.add_argument('--step_lrs_patience', type=int, default=5, help='device ids of multile gpus')
+    parser.add_argument('--step_lrs_alpha', type=float, default=0.1, help='device ids of multile gpus')
+    parser.add_argument('--step_lrs_cutoff', type=float, default=1e-9, help='device ids of multile gpus')
+
     args = parser.parse_args()
 
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
@@ -86,6 +95,11 @@ def main():
         device_ids = args.devices.split(',')
         args.device_ids = [int(id_) for id_ in device_ids]
         args.gpu = args.device_ids[0]
+
+    if not args.wandb_run_name:
+        args.wandb_run_name = args.des
+
+    wandb.init(entity="arjunashok", project="autoformer", config=vars(args), name=args.wandb_run_name)
 
     print('Args in experiment:')
     print(args)
