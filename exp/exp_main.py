@@ -280,7 +280,7 @@ class Exp_Main(Exp_Basic):
 
                 if criterion:
                     loss = criterion(pred, true)
-                total_loss.append(loss)  
+                    total_loss.append(loss)  
 
                 preds.append(pred)
                 trues.append(true)
@@ -290,7 +290,7 @@ class Exp_Main(Exp_Basic):
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
-        total_loss = np.average(total_loss)
+        if total_loss: total_loss = np.average(total_loss)
         preds = np.array(preds)
         trues = np.array(trues)
         print('test shape:', preds.shape, trues.shape)
@@ -312,7 +312,8 @@ class Exp_Main(Exp_Basic):
         f.write('\n')
         f.close()
 
-        wandb.log({"test/mse": mse, "test/mae": mae, "test/loss": total_loss})
+        wandb.log({"test/mse": mse, "test/mae": mae})
+        if total_loss: wandb.log({"test/loss": total_loss})
 
         np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
         np.save(folder_path + 'pred.npy', preds)
