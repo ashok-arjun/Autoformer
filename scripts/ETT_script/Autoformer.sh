@@ -1,5 +1,9 @@
 export CUDA_VISIBLE_DEVICES=0
 
+# Later: Replace with 
+# --root_path ./dataset/windspeed/ \
+# --data_path bahia_windspeed.csv \
+
 for PRED_LEN in 24 48 96
 do
   python -u run.py \
@@ -7,7 +11,7 @@ do
   --root_path ./dataset/ETT-small/ \
   --data_path ETTh2.csv \
     --model_id windspeed_96_$PRED_LEN \
-    --model Informer \
+    --model Autoformer \
     --data Windspeed \
     --features 'MS' \
     --seq_len 96 \
@@ -19,7 +23,7 @@ do
     --enc_in 9 \
     --dec_in 9 \
     --c_out 1 \
-    --des "Exp_Informer_ETTh2_96_${PRED_LEN}_40ep_lr1e-4" \
+    --des "Exp_Autoformer_ETTh2_96_${PRED_LEN}_40ep_lr1e-4" \
     --itr 1 \
     --target 'windspeed' \
     --train_epochs 40 \
@@ -36,7 +40,7 @@ do
   --root_path ./dataset/ETT-small/ \
   --data_path ETTh2.csv \
     --model_id windspeed_96_$PRED_LEN \
-    --model Informer \
+    --model Autoformer \
     --data Windspeed \
     --features 'M' \
     --seq_len 96 \
@@ -48,7 +52,7 @@ do
     --enc_in 9 \
     --dec_in 9 \
     --c_out 9 \
-    --des "Exp_Informer_ETTh2_96_${PRED_LEN}_40ep_lr1e-4" \
+    --des "Exp_Autoformer_ETTh2_96_${PRED_LEN}_40ep_lr1e-4" \
     --itr 1 \
     --target 'windspeed' \
     --train_epochs 40 \

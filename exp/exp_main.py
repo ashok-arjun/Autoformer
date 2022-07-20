@@ -100,9 +100,10 @@ class Exp_Main(Exp_Basic):
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
+        metrics = (mae, mse, rmse, mape, mspe)
 
         self.model.train()
-        return total_loss, mae, mse
+        return total_loss, metrics
 
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
@@ -208,10 +209,11 @@ class Exp_Main(Exp_Basic):
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             wandb.log({"train/epoch_time": time.time()-epoch_time})
             train_loss = np.average(train_loss)
-            vali_loss, vali_mae, vali_mse = self.vali(vali_data, vali_loader, criterion)
-            test_loss, test_mae, test_mse = self.vali(test_data, test_loader, criterion)
+            vali_loss, vali_metrics = self.vali(vali_data, vali_loader, criterion)
+            test_loss, test_metrics = self.vali(test_data, test_loader, criterion)
             wandb.log({"train/epoch_loss": train_loss, "valid/loss": vali_loss.item(), "test/loss": test_loss.item()})
-            wandb.log({"valid/mae": vali_mae, "valid/mse": vali_mse, "test/mae": test_mae, "test/mse": test_mse})
+            wandb.log({"valid/mae": vali_metrics[0], "valid/mse": vali_metrics[1], "test/mae": test_metrics[0], \
+                "test/mse": test_metrics[1]})
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
@@ -304,18 +306,19 @@ class Exp_Main(Exp_Basic):
             os.makedirs(folder_path)
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
-        print('mse:{}, mae:{}'.format(mse, mae))
+        metrics = (mae, mse, rmse, mape, mspe)
+        print('mse:{}, mae:{}, rmse: {}, mape:{}, mspe:{}'.format(mae, mse, rmse, mape, mspe))
         f = open("result.txt", 'a')
         f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}'.format(mse, mae))
+        f.write('mse:{}, mae:{}, rmse: {}, mape:{}, mspe:{}'.format(mae, mse, rmse, mape, mspe))
         f.write('\n')
         f.write('\n')
         f.close()
 
-        wandb.log({"test/mse": mse, "test/mae": mae})
+        wandb.log({"test/mse": mse, "test/mae": mae, "test/mape": mape})
         if total_loss: wandb.log({"test/loss": total_loss})
 
-        np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
+        np.save(folder_path + 'metrics.npy', np.array(list(metrics)))
         np.save(folder_path + 'pred.npy', preds)
         np.save(folder_path + 'true.npy', trues)
 

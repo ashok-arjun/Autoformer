@@ -17,6 +17,12 @@ python -u run.py \
   --enc_in 9 \
   --dec_in 9 \
   --c_out 9 \
-  --des 'Exp_Autoformer_windspeed_96_24_test_10ep' \
+  --des 'Exp_Autoformer_ETTh2_96_24_25ep_lr1e-2_steplrs_dropout0.3_pat2' \
   --itr 1 \
-  --target 'windspeed'
+  --target 'windspeed' \
+  --learning_rate 1e-2 \
+  --dropout 0.3 \
+  --train_epochs 40 \
+  --patience 10 \
+  --step_lrs \
+  --step_lrs_patience 2

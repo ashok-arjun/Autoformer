@@ -163,6 +163,8 @@ def main():
         exp.test(setting, test=1)
         torch.cuda.empty_cache()
 
+    wandb.finish()
+
 
 if __name__ == "__main__":
     main()
