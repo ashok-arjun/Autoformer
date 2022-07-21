@@ -81,6 +81,7 @@ def main():
 
     # Custom
     parser.add_argument('--wandb_run_name', type=str, help='device ids of multile gpus')
+    parser.add_argument('--tags', nargs='+')
     parser.add_argument('--step_lrs', action='store_true', help='device ids of multile gpus')
     parser.add_argument('--step_lrs_patience', type=int, default=5, help='device ids of multile gpus')
     parser.add_argument('--step_lrs_alpha', type=float, default=0.1, help='device ids of multile gpus')
@@ -99,7 +100,7 @@ def main():
     if not args.wandb_run_name:
         args.wandb_run_name = args.des
 
-    wandb.init(entity="arjunashok", project="autoformer", config=vars(args), name=args.wandb_run_name)
+    wandb.init(entity="arjunashok", project="autoformer", config=vars(args), name=args.wandb_run_name, tags=args.tags)
 
     print('Args in experiment:')
     print(args)
